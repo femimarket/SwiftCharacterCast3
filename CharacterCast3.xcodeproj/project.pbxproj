@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		148A4F292FE884C200CF2991 /* ProjectService in Frameworks */ = {isa = PBXBuildFile; productRef = 148A4F282FE884C200CF2991 /* ProjectService */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		148A4F192FE8844A00CF2991 /* CharacterCast3.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CharacterCast3.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -23,6 +27,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				148A4F292FE884C200CF2991 /* ProjectService in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -65,6 +70,7 @@
 			);
 			name = CharacterCast3;
 			packageProductDependencies = (
+				148A4F282FE884C200CF2991 /* ProjectService */,
 			);
 			productName = CharacterCast3;
 			productReference = 148A4F192FE8844A00CF2991 /* CharacterCast3.app */;
@@ -94,6 +100,9 @@
 			);
 			mainGroup = 148A4F102FE8844A00CF2991;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				148A4F272FE884C200CF2991 /* XCRemoteSwiftPackageReference "swift-project-service" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 148A4F1A2FE8844A00CF2991 /* Products */;
 			projectDirPath = "";
@@ -332,6 +341,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		148A4F272FE884C200CF2991 /* XCRemoteSwiftPackageReference "swift-project-service" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/femimarket/swift-project-service";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		148A4F282FE884C200CF2991 /* ProjectService */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 148A4F272FE884C200CF2991 /* XCRemoteSwiftPackageReference "swift-project-service" */;
+			productName = ProjectService;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 148A4F112FE8844A00CF2991 /* Project object */;
 }
