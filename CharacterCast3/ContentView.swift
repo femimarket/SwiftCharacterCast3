@@ -17,6 +17,11 @@ struct ContentView: View {
     }
 }
 
+private enum ImportIntent {
+    case library
+    case lead
+}
+
 // MARK: - Cast screen
 
 struct CastScreen: View {
@@ -26,14 +31,18 @@ struct CastScreen: View {
     @State private var showingFileImporter = false
     @State private var showingPhotosPicker = false
     @State private var photoItem: PhotosPickerItem?
-    @State private var didCast = false
+    @State private var castCount = 0
     @State private var search = ""
     @State private var importError: String?
+    @State private var showingResetConfirm = false
+    @State private var pendingImport: ImportIntent = .library
 
     private let imageExts: Set<String> = ["png", "jpg", "jpeg", "heic", "heif", "webp", "gif", "tiff"]
-    private var columns: [GridItem] { [GridItem(.adaptive(minimum: 104), spacing: 10)] }
+    private var columns: [GridItem] { [GridItem(.adaptive(minimum: 100), spacing: 10)] }
     private var canCast: Bool { mainFilename != nil && targetFilename != nil }
     private var hasSelection: Bool { mainFilename != nil || targetFilename != nil }
+    private var hasLibrary: Bool { !targets.isEmpty || mainFilename != nil }
+    private var hasCast: Bool { castCount > 0 }
 
     private var filteredTargets: [URL] {
         guard !search.isEmpty else { return targets }
@@ -44,30 +53,15 @@ struct CastScreen: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    heroCard
-                    targetsSection
+            Group {
+                if hasLibrary {
+                    workingLayout
+                } else {
+                    onboarding
                 }
-                .padding(.horizontal)
-                .padding(.bottom, 8)
             }
-            .scrollIndicators(.hidden)
-            .scrollBounceBehavior(.basedOnSize)
-            .refreshable { await refreshTargets() }
             .navigationTitle("Cast")
-            .searchable(
-                text: $search,
-                placement: .navigationBarDrawer(displayMode: .always),
-                prompt: "Search characters"
-            )
-            .toolbar {
-                if hasSelection {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("Reset", role: .destructive, action: resetAll)
-                    }
-                }
-            }
+            .toolbar { toolbarContent }
             .safeAreaInset(edge: .bottom) { bottomBar }
         }
         .tint(Color(red: 0.95, green: 0.25, blue: 0.55))
@@ -100,123 +94,286 @@ struct CastScreen: View {
         } message: { message in
             Text(message)
         }
+        .confirmationDialog(
+            "Reset selection?",
+            isPresented: $showingResetConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Reset", role: .destructive, action: resetAll)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Clears the lead and target. Doesn’t delete any characters.")
+        }
         .sensoryFeedback(.selection, trigger: targetFilename)
         .sensoryFeedback(.impact(weight: .light), trigger: mainFilename)
-        .sensoryFeedback(.success, trigger: didCast)
+        .sensoryFeedback(.success, trigger: castCount)
+        .onDrop(of: [.image, .fileURL], isTargeted: nil) { providers in
+            handleDrop(providers, intent: .library)
+            return true
+        }
         .task { await refreshTargets() }
     }
 
-    // MARK: Hero
+    // MARK: Toolbar
 
-    private var heroCard: some View {
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        if hasLibrary {
+            ToolbarItem(placement: .topBarLeading) { addMenu }
+        }
+        if hasSelection {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Reset", role: .destructive) {
+                    showingResetConfirm = true
+                }
+            }
+        }
+    }
+
+    private var addMenu: some View {
         Menu {
             Button {
-                showingFileImporter = true
-            } label: {
-                Label("Choose from Files", systemImage: "folder")
-            }
-            Button {
+                pendingImport = .library
                 showingPhotosPicker = true
             } label: {
-                Label("Choose from Photos", systemImage: "photo.on.rectangle")
+                Label("From Photos", systemImage: "photo.on.rectangle")
+            }
+            Button {
+                pendingImport = .library
+                showingFileImporter = true
+            } label: {
+                Label("From Files", systemImage: "folder")
+            }
+        } label: {
+            Image(systemName: "plus")
+        }
+    }
+
+    // MARK: Onboarding
+
+    private var onboarding: some View {
+        VStack(spacing: 28) {
+            Spacer()
+            VStack(spacing: 18) {
+                Image(systemName: "theatermasks.fill")
+                    .font(.system(size: 64, weight: .light))
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.tint, .secondary)
+                VStack(spacing: 8) {
+                    Text("Set up your cast")
+                        .font(.title.weight(.semibold))
+                    Text("Add a character. Pick a lead. Pick who to wear.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                }
+            }
+            VStack(spacing: 10) {
+                Button {
+                    pendingImport = .library
+                    showingPhotosPicker = true
+                } label: {
+                    Label("Add from Photos", systemImage: "photo.on.rectangle")
+                        .frame(maxWidth: 320)
+                        .padding(.horizontal, 8)
+                }
+                .buttonStyle(.glassProminent)
+                .controlSize(.large)
+
+                Button {
+                    pendingImport = .library
+                    showingFileImporter = true
+                } label: {
+                    Label("Add from Files", systemImage: "folder")
+                        .frame(maxWidth: 320)
+                        .padding(.horizontal, 8)
+                }
+                .buttonStyle(.glass)
+                .controlSize(.large)
+            }
+            Text("Or drop an image anywhere on this screen.")
+                .font(.footnote)
+                .foregroundStyle(.tertiary)
+            Spacer()
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding()
+    }
+
+    // MARK: Working layout
+
+    private var workingLayout: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                pairSlots
+                charactersSection
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+            .frame(maxWidth: 700)
+            .frame(maxWidth: .infinity)
+        }
+        .scrollIndicators(.hidden)
+        .scrollBounceBehavior(.basedOnSize)
+        .searchable(
+            text: $search,
+            placement: .navigationBarDrawer(displayMode: .automatic),
+            prompt: "Search characters"
+        )
+    }
+
+    // MARK: Slots
+
+    private var pairSlots: some View {
+        HStack(spacing: 12) {
+            leadSlot
+            targetSlot
+        }
+    }
+
+    private var leadSlot: some View {
+        Menu {
+            Button {
+                pendingImport = .lead
+                showingPhotosPicker = true
+            } label: {
+                Label(mainFilename == nil ? "From Photos" : "Replace from Photos",
+                      systemImage: "photo.on.rectangle")
+            }
+            Button {
+                pendingImport = .lead
+                showingFileImporter = true
+            } label: {
+                Label(mainFilename == nil ? "From Files" : "Replace from Files",
+                      systemImage: "folder")
             }
             if mainFilename != nil {
                 Divider()
                 Button(role: .destructive) {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                         mainFilename = nil
-                        didCast = false
+                        castCount = 0
                     }
                 } label: {
                     Label("Remove Lead", systemImage: "trash")
                 }
             }
         } label: {
-            Color.clear
-                .aspectRatio(0.95, contentMode: .fit)
-                .frame(maxWidth: .infinity)
-                .overlay { heroContent }
-                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            slotCard(
+                filename: mainFilename,
+                role: "LEAD",
+                placeholderIcon: "person.crop.square.badge.plus",
+                placeholderText: "Lead"
+            )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(mainFilename == nil ? "Choose lead character" : "Lead character options")
-        .dropDestination(for: Data.self) { items, _ in
-            guard let data = items.first else { return false }
-            ingest(data: data, suggestedStem: "lead")
-            return true
+        .accessibilityLabel(mainFilename.map { "Lead: \(displayName($0))" } ?? "Choose lead")
+    }
+
+    private var targetSlot: some View {
+        Button {
+            if targetFilename != nil {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                    targetFilename = nil
+                    castCount = 0
+                }
+            }
+        } label: {
+            slotCard(
+                filename: targetFilename,
+                role: "CAST AS",
+                placeholderIcon: "person.crop.square",
+                placeholderText: "Cast as"
+            )
         }
+        .buttonStyle(.plain)
+        .disabled(targetFilename == nil)
+        .accessibilityLabel(
+            targetFilename.map { "Target: \(displayName($0)). Tap to clear." }
+            ?? "Tap a character below to cast as."
+        )
+    }
+
+    private func slotCard(
+        filename: String?,
+        role: String,
+        placeholderIcon: String,
+        placeholderText: String
+    ) -> some View {
+        Color.clear
+            .aspectRatio(0.78, contentMode: .fit)
+            .frame(maxWidth: .infinity)
+            .overlay { slotContent(filename: filename, icon: placeholderIcon, text: placeholderText) }
+            .overlay(alignment: .topLeading) {
+                if filename != nil {
+                    Text(role)
+                        .font(.caption2.weight(.semibold))
+                        .tracking(0.8)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(.black.opacity(0.45)))
+                        .padding(8)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     @ViewBuilder
-    private var heroContent: some View {
-        if let main = mainFilename {
-            ZStack(alignment: .bottomLeading) {
-                Thumbnail(url: ProjectService.getUrl(for: main), maxPixelSize: 1600)
+    private func slotContent(filename: String?, icon: String, text: String) -> some View {
+        if let filename {
+            ZStack(alignment: .bottom) {
+                Thumbnail(url: ProjectService.getUrl(for: filename), maxPixelSize: 800)
                 LinearGradient(
-                    colors: [.clear, .clear, .black.opacity(0.7)],
+                    colors: [.clear, .clear, .black.opacity(0.55)],
                     startPoint: .top, endPoint: .bottom
                 )
-                Text(displayName(main))
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .padding()
             }
         } else {
             ZStack {
                 Rectangle().fill(.regularMaterial)
-                VStack(spacing: 10) {
-                    Image(systemName: "person.crop.square.badge.plus")
-                        .font(.largeTitle)
+                VStack(spacing: 8) {
+                    Image(systemName: icon)
+                        .font(.title.weight(.light))
                         .foregroundStyle(.secondary)
-                    Text("Choose Lead")
-                        .font(.headline)
-                    Text("Pick a portrait, or drop one here")
-                        .font(.footnote)
+                    Text(text)
+                        .font(.subheadline.weight(.medium))
                         .foregroundStyle(.secondary)
                 }
             }
         }
     }
 
-    // MARK: Targets
+    // MARK: Characters
 
-    private var targetsSection: some View {
+    private var charactersSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Cast As")
+                Text("Characters")
                     .font(.headline)
                 Spacer()
-                if !targets.isEmpty {
-                    Text("\(filteredTargets.count)")
-                        .font(.footnote.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .contentTransition(.numericText())
-                }
+                Text("\(filteredTargets.count)")
+                    .font(.footnote.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .contentTransition(.numericText())
             }
 
-            if targets.isEmpty {
-                ContentUnavailableView(
-                    "No Characters",
-                    systemImage: "photo.stack",
-                    description: Text("Drop images into the app’s Documents folder to cast.")
-                )
-                .frame(maxWidth: .infinity)
-            } else if filteredTargets.isEmpty {
+            if filteredTargets.isEmpty {
                 ContentUnavailableView.search(text: search)
                     .frame(maxWidth: .infinity)
             } else {
                 LazyVGrid(columns: columns, spacing: 10) {
                     ForEach(filteredTargets, id: \.self) { url in
-                        targetCell(url)
+                        characterCell(url)
                     }
                 }
             }
         }
     }
 
-    private func targetCell(_ url: URL) -> some View {
+    private func characterCell(_ url: URL) -> some View {
         let name = url.lastPathComponent
         let isSelected = (name == targetFilename)
         let isLead = (name == mainFilename)
@@ -224,11 +381,11 @@ struct CastScreen: View {
         return Button {
             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                 targetFilename = isSelected ? nil : name
-                didCast = false
+                castCount = 0
             }
         } label: {
             Color.clear
-                .aspectRatio(1, contentMode: .fit)
+                .aspectRatio(0.75, contentMode: .fit)
                 .frame(maxWidth: .infinity)
                 .overlay { Thumbnail(url: url, maxPixelSize: 360) }
                 .overlay(alignment: .topTrailing) {
@@ -266,7 +423,7 @@ struct CastScreen: View {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                         mainFilename = name
                         if targetFilename == name { targetFilename = nil }
-                        didCast = false
+                        castCount = 0
                     }
                 } label: {
                     Label("Use as Lead", systemImage: "crown")
@@ -276,11 +433,16 @@ struct CastScreen: View {
                 Button {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                         targetFilename = nil
-                        didCast = false
+                        castCount = 0
                     }
                 } label: {
                     Label("Clear Selection", systemImage: "xmark.circle")
                 }
+            }
+            Button(role: .destructive) {
+                deleteCharacter(named: name)
+            } label: {
+                Label("Delete", systemImage: "trash")
             }
         }
         .accessibilityLabel(displayName(name))
@@ -291,9 +453,17 @@ struct CastScreen: View {
 
     @ViewBuilder
     private var bottomBar: some View {
-        if canCast, let main = mainFilename, let target = targetFilename {
-            VStack(spacing: 12) {
-                pairPreview(main: main, target: target)
+        if canCast {
+            HStack(spacing: 10) {
+                if hasCast {
+                    Image(systemName: "checkmark")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.green)
+                        .symbolEffect(.bounce, value: castCount)
+                        .padding(.leading, 4)
+                        .accessibilityLabel("Args set")
+                        .transition(.scale.combined(with: .opacity))
+                }
                 castButton
             }
             .frame(maxWidth: .infinity)
@@ -301,46 +471,17 @@ struct CastScreen: View {
             .padding(.bottom, 8)
             .transition(.move(edge: .bottom).combined(with: .opacity))
             .animation(.spring(response: 0.4, dampingFraction: 0.85), value: canCast)
+            .animation(.spring(response: 0.3, dampingFraction: 0.85), value: hasCast)
         }
-    }
-
-    private func pairPreview(main: String, target: String) -> some View {
-        HStack(spacing: 10) {
-            roundPreview(name: main)
-            Image(systemName: "arrow.right")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-            roundPreview(name: target)
-            if didCast {
-                Image(systemName: "checkmark")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.green)
-                    .symbolEffect(.bounce, value: didCast)
-                    .padding(.leading, 2)
-                    .padding(.trailing, 4)
-                    .accessibilityLabel("Args set")
-            }
-        }
-        .padding(8)
-        .glassEffect(.regular, in: Capsule())
-    }
-
-    private func roundPreview(name: String) -> some View {
-        Thumbnail(url: ProjectService.getUrl(for: name), maxPixelSize: 160)
-            .frame(width: 32, height: 32)
-            .clipShape(Circle())
     }
 
     private var castButton: some View {
         Button { triggerCast() } label: {
-            Label(didCast ? "Cast set" : "Cast",
-                  systemImage: didCast ? "checkmark" : "sparkles")
-                .contentTransition(.symbolEffect(.replace))
+            Label("Cast", systemImage: "sparkles")
                 .padding(.horizontal, 8)
         }
         .buttonStyle(.glassProminent)
         .controlSize(.large)
-        .disabled(didCast)
     }
 
     // MARK: Actions
@@ -348,15 +489,26 @@ struct CastScreen: View {
     private func triggerCast() {
         guard let main = mainFilename, let target = targetFilename else { return }
         ProjectService.setCharacterCast(main, target)
-        withAnimation(.easeOut(duration: 0.25)) { didCast = true }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+            castCount += 1
+        }
     }
 
     private func resetAll() {
         withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
             mainFilename = nil
             targetFilename = nil
-            didCast = false
+            castCount = 0
         }
+    }
+
+    private func deleteCharacter(named name: String) {
+        let url = ProjectService.getUrl(for: name)
+        try? FileManager.default.removeItem(at: url)
+        if mainFilename == name { mainFilename = nil }
+        if targetFilename == name { targetFilename = nil }
+        castCount = 0
+        Task { await refreshTargets() }
     }
 
     private func handleFileImport(_ result: Result<[URL], Error>) {
@@ -377,26 +529,60 @@ struct CastScreen: View {
     }
 
     private func handlePhotoItem(_ item: PhotosPickerItem) async {
-        defer { photoItem = nil }
+        defer { Task { @MainActor in photoItem = nil } }
         do {
             guard let data = try await item.loadTransferable(type: Data.self) else {
-                importError = "Couldn’t load the selected photo."
+                await MainActor.run { importError = "Couldn’t load the selected photo." }
                 return
             }
             await MainActor.run {
-                ingest(data: data, suggestedStem: "lead")
+                ingest(data: data, suggestedStem: "photo")
             }
         } catch {
             await MainActor.run { importError = error.localizedDescription }
         }
     }
 
+    private func handleDrop(_ providers: [NSItemProvider], intent: ImportIntent) {
+        guard let provider = providers.first else { return }
+        pendingImport = intent
+        provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
+            if let data {
+                let suggested = provider.suggestedName.map { "\($0).jpg" }
+                Task { @MainActor in
+                    ingest(data: data, originalName: suggested, suggestedStem: "drop")
+                }
+                return
+            }
+            provider.loadDataRepresentation(forTypeIdentifier: UTType.fileURL.identifier) { urlData, _ in
+                guard let urlData,
+                      let urlString = String(data: urlData, encoding: .utf8),
+                      let url = URL(string: urlString)
+                else { return }
+                let needsScope = url.startAccessingSecurityScopedResource()
+                defer { if needsScope { url.stopAccessingSecurityScopedResource() } }
+                guard let fileData = try? Data(contentsOf: url) else { return }
+                Task { @MainActor in
+                    ingest(data: fileData, originalName: url.lastPathComponent)
+                }
+            }
+        }
+    }
+
     private func ingest(data: Data, originalName: String? = nil, suggestedStem: String = "image") {
         let base = originalName ?? "\(suggestedStem)-\(UUID().uuidString.prefix(6)).jpg"
+        let wasFirst = targets.isEmpty && mainFilename == nil
         let filename = uniqueFilename(for: base)
         ProjectService.saveFile(data, named: filename)
-        mainFilename = filename
-        didCast = false
+
+        switch pendingImport {
+        case .lead:
+            mainFilename = filename
+        case .library:
+            if wasFirst { mainFilename = filename }
+        }
+        pendingImport = .library
+        castCount = 0
         Task { await refreshTargets() }
     }
 
@@ -423,16 +609,23 @@ struct CastScreen: View {
         return ext.isEmpty ? cleanedStem : "\(cleanedStem).\(ext)"
     }
 
-    @MainActor
     private func refreshTargets() async {
-        let all = ProjectService.getAllGenerations()
-        targets = all
-            .filter { imageExts.contains($0.pathExtension.lowercased()) }
-            .sorted { lhs, rhs in
-                let l = (try? FileManager.default.attributesOfItem(atPath: lhs.path)[.modificationDate] as? Date) ?? .distantPast
-                let r = (try? FileManager.default.attributesOfItem(atPath: rhs.path)[.modificationDate] as? Date) ?? .distantPast
-                return l > r
-            }
+        let exts = imageExts
+        let result: [URL] = await Task.detached(priority: .utility) {
+            let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+            guard let urls = try? FileManager.default.contentsOfDirectory(
+                at: docs,
+                includingPropertiesForKeys: [.contentModificationDateKey]
+            ) else { return [] }
+            return urls
+                .filter { exts.contains($0.pathExtension.lowercased()) }
+                .sorted { lhs, rhs in
+                    let l = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                    let r = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                    return l > r
+                }
+        }.value
+        await MainActor.run { self.targets = result }
     }
 }
 
