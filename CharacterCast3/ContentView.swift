@@ -17,11 +17,6 @@ struct ContentView: View {
     }
 }
 
-private enum ImportIntent {
-    case library
-    case lead
-}
-
 // MARK: - Cast screen
 
 struct CastScreen: View {
@@ -35,7 +30,6 @@ struct CastScreen: View {
     @State private var search = ""
     @State private var importError: String?
     @State private var showingResetConfirm = false
-    @State private var pendingImport: ImportIntent = .library
 
     private let imageExts: Set<String> = ["png", "jpg", "jpeg", "heic", "heif", "webp", "gif", "tiff"]
     private var columns: [GridItem] { [GridItem(.adaptive(minimum: 100), spacing: 10)] }
@@ -108,7 +102,7 @@ struct CastScreen: View {
         .sensoryFeedback(.impact(weight: .light), trigger: mainFilename)
         .sensoryFeedback(.success, trigger: castCount)
         .onDrop(of: [.image, .fileURL], isTargeted: nil) { providers in
-            handleDrop(providers, intent: .library)
+            handleDrop(providers)
             return true
         }
         .task { await refreshTargets() }
@@ -118,34 +112,12 @@ struct CastScreen: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        if hasLibrary {
-            ToolbarItem(placement: .topBarLeading) { addMenu }
-        }
         if hasSelection {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Reset", role: .destructive) {
                     showingResetConfirm = true
                 }
             }
-        }
-    }
-
-    private var addMenu: some View {
-        Menu {
-            Button {
-                pendingImport = .library
-                showingPhotosPicker = true
-            } label: {
-                Label("From Photos", systemImage: "photo.on.rectangle")
-            }
-            Button {
-                pendingImport = .library
-                showingFileImporter = true
-            } label: {
-                Label("From Files", systemImage: "folder")
-            }
-        } label: {
-            Image(systemName: "plus")
         }
     }
 
@@ -162,7 +134,7 @@ struct CastScreen: View {
                 VStack(spacing: 8) {
                     Text("Set up your cast")
                         .font(.title.weight(.semibold))
-                    Text("Add a character. Pick a lead. Pick who to wear.")
+                    Text("Pick a lead. Choose who to wear.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -171,10 +143,9 @@ struct CastScreen: View {
             }
             VStack(spacing: 10) {
                 Button {
-                    pendingImport = .library
                     showingPhotosPicker = true
                 } label: {
-                    Label("Add from Photos", systemImage: "photo.on.rectangle")
+                    Label("Pick Lead from Photos", systemImage: "photo.on.rectangle")
                         .frame(maxWidth: 320)
                         .padding(.horizontal, 8)
                 }
@@ -182,10 +153,9 @@ struct CastScreen: View {
                 .controlSize(.large)
 
                 Button {
-                    pendingImport = .library
                     showingFileImporter = true
                 } label: {
-                    Label("Add from Files", systemImage: "folder")
+                    Label("Pick Lead from Files", systemImage: "folder")
                         .frame(maxWidth: 320)
                         .padding(.horizontal, 8)
                 }
@@ -236,14 +206,12 @@ struct CastScreen: View {
     private var leadSlot: some View {
         Menu {
             Button {
-                pendingImport = .lead
                 showingPhotosPicker = true
             } label: {
                 Label(mainFilename == nil ? "From Photos" : "Replace from Photos",
                       systemImage: "photo.on.rectangle")
             }
             Button {
-                pendingImport = .lead
                 showingFileImporter = true
             } label: {
                 Label(mainFilename == nil ? "From Files" : "Replace from Files",
@@ -543,9 +511,8 @@ struct CastScreen: View {
         }
     }
 
-    private func handleDrop(_ providers: [NSItemProvider], intent: ImportIntent) {
+    private func handleDrop(_ providers: [NSItemProvider]) {
         guard let provider = providers.first else { return }
-        pendingImport = intent
         provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
             if let data {
                 let suggested = provider.suggestedName.map { "\($0).jpg" }
@@ -571,17 +538,9 @@ struct CastScreen: View {
 
     private func ingest(data: Data, originalName: String? = nil, suggestedStem: String = "image") {
         let base = originalName ?? "\(suggestedStem)-\(UUID().uuidString.prefix(6)).jpg"
-        let wasFirst = targets.isEmpty && mainFilename == nil
         let filename = uniqueFilename(for: base)
         ProjectService.saveFile(data, named: filename)
-
-        switch pendingImport {
-        case .lead:
-            mainFilename = filename
-        case .library:
-            if wasFirst { mainFilename = filename }
-        }
-        pendingImport = .library
+        mainFilename = filename
         castCount = 0
         Task { await refreshTargets() }
     }
