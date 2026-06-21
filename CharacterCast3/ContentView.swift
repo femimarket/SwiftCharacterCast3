@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import UIKit
 import ImageIO
 import UniformTypeIdentifiers
 import ProjectService
@@ -25,10 +24,19 @@ struct CastScreen: View {
     @State private var targets: [URL] = []
     @State private var showingImporter = false
     @State private var didCast = false
+    @State private var search = ""
+    @Namespace private var animation
 
     private let imageExts: Set<String> = ["png", "jpg", "jpeg", "heic", "heif", "webp", "gif", "tiff"]
     private var columns: [GridItem] { [GridItem(.adaptive(minimum: 104), spacing: 10)] }
     private var canCast: Bool { mainFilename != nil && targetFilename != nil }
+
+    private var filteredTargets: [URL] {
+        guard !search.isEmpty else { return targets }
+        return targets.filter {
+            $0.lastPathComponent.localizedCaseInsensitiveContains(search)
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -43,6 +51,11 @@ struct CastScreen: View {
             .scrollIndicators(.hidden)
             .refreshable { await refreshTargets() }
             .navigationTitle("Cast")
+            .searchable(
+                text: $search,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Search characters"
+            )
             .safeAreaInset(edge: .bottom) { bottomBar }
         }
         .tint(Color(red: 0.95, green: 0.25, blue: 0.55))
@@ -54,6 +67,9 @@ struct CastScreen: View {
         ) { result in
             handleImport(result)
         }
+        .sensoryFeedback(.selection, trigger: targetFilename)
+        .sensoryFeedback(.impact(weight: .light), trigger: mainFilename)
+        .sensoryFeedback(.success, trigger: didCast)
         .task { await refreshTargets() }
     }
 
@@ -69,7 +85,6 @@ struct CastScreen: View {
 
     private var heroCard: some View {
         Button {
-            UIImpactFeedbackGenerator(style: .soft).impactOccurred()
             showingImporter = true
         } label: {
             Color.clear
@@ -124,17 +139,22 @@ struct CastScreen: View {
                     .font(.headline)
                 Spacer()
                 if !targets.isEmpty {
-                    Text("\(targets.count)")
+                    Text("\(filteredTargets.count)")
                         .font(.footnote.monospacedDigit())
                         .foregroundStyle(.secondary)
+                        .contentTransition(.numericText())
                 }
             }
 
             if targets.isEmpty {
                 emptyTargets
+            } else if filteredTargets.isEmpty {
+                ContentUnavailableView.search(text: search)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
             } else {
                 LazyVGrid(columns: columns, spacing: 10) {
-                    ForEach(targets, id: \.self) { url in
+                    ForEach(filteredTargets, id: \.self) { url in
                         targetCell(url)
                     }
                 }
@@ -148,8 +168,7 @@ struct CastScreen: View {
         let isLead = (name == mainFilename)
 
         return Button {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                 targetFilename = isSelected ? nil : name
                 didCast = false
             }
@@ -157,7 +176,14 @@ struct CastScreen: View {
             Color.clear
                 .aspectRatio(1, contentMode: .fit)
                 .frame(maxWidth: .infinity)
-                .overlay { Thumbnail(url: url, maxPixelSize: 360) }
+                .overlay {
+                    Thumbnail(url: url, maxPixelSize: 360)
+                        .matchedGeometryEffect(
+                            id: "target-\(name)",
+                            in: animation,
+                            isSource: !isSelected
+                        )
+                }
                 .overlay(alignment: .topTrailing) {
                     if isLead {
                         Image(systemName: "crown.fill")
@@ -175,6 +201,7 @@ struct CastScreen: View {
                             .font(.title3)
                             .symbolRenderingMode(.palette)
                             .foregroundStyle(.white, .tint)
+                            .symbolEffect(.bounce, value: isSelected)
                             .padding(6)
                             .transition(.scale.combined(with: .opacity))
                     }
@@ -186,6 +213,29 @@ struct CastScreen: View {
                 }
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            if !isLead {
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        mainFilename = name
+                        if targetFilename == name { targetFilename = nil }
+                        didCast = false
+                    }
+                } label: {
+                    Label("Use as Lead", systemImage: "crown")
+                }
+            }
+            if isSelected {
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        targetFilename = nil
+                        didCast = false
+                    }
+                } label: {
+                    Label("Clear Selection", systemImage: "xmark.circle")
+                }
+            }
+        }
         .accessibilityLabel(name)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
@@ -206,25 +256,28 @@ struct CastScreen: View {
         VStack(spacing: 12) {
             if let main = mainFilename, let target = targetFilename {
                 pairPreview(main: main, target: target)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             castButton
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal)
         .padding(.bottom, 8)
+        .animation(.spring(response: 0.4, dampingFraction: 0.85), value: canCast)
     }
 
     private func pairPreview(main: String, target: String) -> some View {
         HStack(spacing: 10) {
-            roundPreview(name: main)
+            roundPreview(name: main, isLead: true)
             Image(systemName: "arrow.right")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
-            roundPreview(name: target)
+            roundPreview(name: target, isLead: false)
             if didCast {
                 Image(systemName: "checkmark")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.green)
+                    .symbolEffect(.bounce, value: didCast)
                     .padding(.leading, 2)
                     .padding(.trailing, 4)
                     .accessibilityLabel("Args set")
@@ -234,16 +287,22 @@ struct CastScreen: View {
         .glassEffect(.regular, in: Capsule())
     }
 
-    private func roundPreview(name: String) -> some View {
+    private func roundPreview(name: String, isLead: Bool) -> some View {
         Thumbnail(url: ProjectService.getUrl(for: name), maxPixelSize: 160)
             .frame(width: 32, height: 32)
             .clipShape(Circle())
+            .matchedGeometryEffect(
+                id: isLead ? "lead-\(name)" : "target-\(name)",
+                in: animation,
+                isSource: isLead
+            )
     }
 
     private var castButton: some View {
         Button { triggerCast() } label: {
             Label(didCast ? "Cast set" : "Cast",
                   systemImage: didCast ? "checkmark" : "sparkles")
+                .contentTransition(.symbolEffect(.replace))
                 .padding(.horizontal, 8)
         }
         .buttonStyle(.glassProminent)
@@ -255,7 +314,6 @@ struct CastScreen: View {
 
     private func triggerCast() {
         guard let main = mainFilename, let target = targetFilename else { return }
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
         ProjectService.setCharacterCast(main, target)
         withAnimation(.easeOut(duration: 0.25)) { didCast = true }
     }
@@ -279,12 +337,8 @@ struct CastScreen: View {
         let url = URL(fileURLWithPath: original)
         let stem = url.deletingPathExtension().lastPathComponent
         let ext = url.pathExtension
-        var i = 2
-        while true {
-            let candidate = ext.isEmpty ? "\(stem) \(i)" : "\(stem) \(i).\(ext)"
-            if !existing.contains(candidate) { return candidate }
-            i += 1
-        }
+        let suffix = UUID().uuidString.prefix(6)
+        return ext.isEmpty ? "\(stem)-\(suffix)" : "\(stem)-\(suffix).\(ext)"
     }
 
     @MainActor
