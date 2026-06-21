@@ -11,15 +11,19 @@ import UniformTypeIdentifiers
 import PhotosUI
 import ProjectService
 
-struct ContentView: View {
-    var body: some View {
+public struct ContentView: View {
+    public init() {}
+
+    public var body: some View {
         CastScreen()
     }
 }
 
 // MARK: - Cast screen
 
-struct CastScreen: View {
+public struct CastScreen: View {
+    public init() {}
+
     @State private var mainFilename: String?
     @State private var targetFilename: String?
     @State private var targets: [URL] = []
@@ -45,7 +49,7 @@ struct CastScreen: View {
         }
     }
 
-    var body: some View {
+    public var body: some View {
         NavigationStack {
             Group {
                 if hasLibrary {
