@@ -546,22 +546,14 @@ public struct ContentView: View {
     }
 
     private func ingest(data: Data, originalName: String? = nil, suggestedStem: String = "image") {
-        let base = originalName ?? "\(suggestedStem)-\(UUID().uuidString.prefix(6)).jpg"
-        let filename = uniqueFilename(for: base)
-        ProjectService.saveFile(data, named: filename)
+        let filename = originalName ?? "\(suggestedStem)-\(UUID().uuidString.prefix(6)).jpg"
+        let existing = Set(targets.map { $0.lastPathComponent })
+        if !existing.contains(filename) {
+            ProjectService.saveFile(data, named: filename)
+        }
         mainFilename = filename
         castCount = 0
         Task { await refreshTargets() }
-    }
-
-    private func uniqueFilename(for original: String) -> String {
-        let existing = Set(targets.map { $0.lastPathComponent })
-        if !existing.contains(original) { return original }
-        let url = URL(fileURLWithPath: original)
-        let stem = url.deletingPathExtension().lastPathComponent
-        let ext = url.pathExtension
-        let suffix = UUID().uuidString.prefix(6)
-        return ext.isEmpty ? "\(stem)-\(suffix)" : "\(stem)-\(suffix).\(ext)"
     }
 
     private func displayName(_ filename: String) -> String {
