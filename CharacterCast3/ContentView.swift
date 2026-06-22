@@ -12,7 +12,11 @@ import PhotosUI
 import ProjectService
 
 public struct ContentView: View {
-    public init() {}
+    private let onCast: () -> Void
+
+    public init(onCast: @escaping () -> Void = {}) {
+        self.onCast = onCast
+    }
 
     @State private var mainFilename: String?
     @State private var targetFilename: String?
@@ -469,6 +473,7 @@ public struct ContentView: View {
         withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
             castCount += 1
         }
+        onCast()
     }
 
     private func resetAll() {
