@@ -49,6 +49,7 @@ public struct ContentView: View {
         }
         .navigationTitle("Cast")
         .toolbar { toolbarContent }
+        .toolbar(.hidden, for: .tabBar)
         .safeAreaInset(edge: .bottom) { bottomBar }
         .fileImporter(
             isPresented: $showingFileImporter,
@@ -411,17 +412,9 @@ public struct ContentView: View {
 
     @ViewBuilder
     private var bottomBar: some View {
-        if canCast {
-            HStack(spacing: 10) {
-                if hasCast {
-                    Image(systemName: "checkmark")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color.green)
-                        .symbolEffect(.bounce, value: castCount)
-                        .padding(.leading, 4)
-                        .accessibilityLabel("Args set")
-                        .transition(.scale.combined(with: .opacity))
-                }
+        if canCast, let main = mainFilename, let target = targetFilename {
+            VStack(spacing: 12) {
+                pairPreview(main: main, target: target)
                 castButton
             }
             .frame(maxWidth: .infinity)
@@ -429,8 +422,34 @@ public struct ContentView: View {
             .padding(.bottom, 8)
             .transition(.move(edge: .bottom).combined(with: .opacity))
             .animation(.spring(response: 0.4, dampingFraction: 0.85), value: canCast)
-            .animation(.spring(response: 0.3, dampingFraction: 0.85), value: hasCast)
         }
+    }
+
+    private func pairPreview(main: String, target: String) -> some View {
+        HStack(spacing: 10) {
+            roundPreview(name: main)
+            Image(systemName: "arrow.right")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            roundPreview(name: target)
+            if hasCast {
+                Image(systemName: "checkmark")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.green)
+                    .symbolEffect(.bounce, value: castCount)
+                    .padding(.leading, 2)
+                    .padding(.trailing, 4)
+                    .accessibilityLabel("Args set")
+            }
+        }
+        .padding(8)
+        .glassEffect(.regular, in: Capsule())
+    }
+
+    private func roundPreview(name: String) -> some View {
+        Thumbnail(url: ProjectService.getUrl(for: name), maxPixelSize: 160)
+            .frame(width: 32, height: 32)
+            .clipShape(Circle())
     }
 
     private var castButton: some View {
