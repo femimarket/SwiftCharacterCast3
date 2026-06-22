@@ -14,16 +14,6 @@ import ProjectService
 public struct ContentView: View {
     public init() {}
 
-    public var body: some View {
-        CastScreen()
-    }
-}
-
-// MARK: - Cast screen
-
-public struct CastScreen: View {
-    public init() {}
-
     @State private var mainFilename: String?
     @State private var targetFilename: String?
     @State private var targets: [URL] = []
@@ -50,20 +40,16 @@ public struct CastScreen: View {
     }
 
     public var body: some View {
-        NavigationStack {
-            Group {
-                if hasLibrary {
-                    workingLayout
-                } else {
-                    onboarding
-                }
+        Group {
+            if hasLibrary {
+                workingLayout
+            } else {
+                onboarding
             }
-            .navigationTitle("Cast")
-            .toolbar { toolbarContent }
-            .safeAreaInset(edge: .bottom) { bottomBar }
         }
-        .tint(Color(red: 0.95, green: 0.25, blue: 0.55))
-        .preferredColorScheme(.dark)
+        .navigationTitle("Cast")
+        .toolbar { toolbarContent }
+        .safeAreaInset(edge: .bottom) { bottomBar }
         .fileImporter(
             isPresented: $showingFileImporter,
             allowedContentTypes: [.image],
@@ -644,5 +630,7 @@ private struct Thumbnail: View {
 }
 
 #Preview {
-    ContentView()
+    NavigationStack { ContentView() }
+        .tint(Color(red: 0.95, green: 0.25, blue: 0.55))
+        .preferredColorScheme(.dark)
 }

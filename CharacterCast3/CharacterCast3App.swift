@@ -11,7 +11,11 @@ import SwiftUI
 struct CharacterCast3App: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            NavigationStack {
+                ContentView()
+            }
+            .tint(Color(red: 0.95, green: 0.25, blue: 0.55))
+            .preferredColorScheme(.dark)
         }
     }
 }
