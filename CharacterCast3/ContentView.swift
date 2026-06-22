@@ -179,7 +179,7 @@ public struct ContentView: View {
         .scrollBounceBehavior(.basedOnSize)
         .searchable(
             text: $search,
-            placement: .navigationBarDrawer(displayMode: .automatic),
+            placement: .navigationBarDrawer(displayMode: .always),
             prompt: "Search characters"
         )
     }
