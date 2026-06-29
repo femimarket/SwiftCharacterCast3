@@ -1,74 +1,97 @@
 # CharacterCast3
 
-## Overview
-CharacterCast3 is a SwiftUI-based iOS application for managing and "casting" character images. It provides a streamlined workflow for importing images, organizing them into a searchable library, and assigning lead/target roles for downstream processing. The app emphasizes performance, modern UI conventions, and declarative state management.
+**CharacterCast3** is a SwiftUI-based iOS application designed for casting characters. It allows users to select a "Lead" character and a "Target" character from an imported library of images, then "cast" them together. The app features a modern, dark-mode-first interface with gesture support, drag-and-drop, and photo library integration.
 
 ## Features
-- **Multi-Source Import**: Pick images from the Photos app, Files app, or drag-and-drop directly onto the screen.
-- **Role Assignment**: Designate a `Lead` image and a `Target` image (`CAST AS`).
-- **Library Management**: Searchable grid view, inline deletion, and reset functionality.
-- **Performance-Optimized Thumbnails**: Async, cached, and downsampled image loading via `CGImageSource`.
-- **Modern SwiftUI UX**: Enforced dark mode, custom accent tint, glass UI styles, spring animations, and haptic/auditory sensory feedback.
-- **Security-Scoped File Access**: Properly handles sandboxed file URLs and Photos picker data.
 
-## Requirements
-- iOS 26.0+
-- Swift 6.0+
-- Xcode 16+ (or compatible Swift 6.2 toolchain)
+- **Lead & Target Selection**: Choose a primary character (Lead) and a secondary character (Target) from your library.
+- **Image Library Management**: Import images via the Photos app, file system, or drag-and-drop.
+- **Smart Search**: Filter your character library by name.
+- **Visual Feedback**: Real-time previews of selected pairs and cast counts.
+- **Performance Optimized**: Lazy-loaded, cached, and downsampled thumbnails for smooth scrolling.
+- **Dark Mode Default**: Optimized for dark environments with a custom tint color.
 
-## Installation & Build
-CharacterCast3 is distributed as a Swift Package. To build:
+## Architecture
 
-1. Clone or download the repository.
-2. Open the project in Xcode or build via command line:
-   ```bash
-   swift build
-   ```
-3. The `Package.swift` manifest defines a library target (`CharacterCast3`) and explicitly excludes app-specific files (`CharacterCast3App.swift`, `Assets.xcassets`) from the library bundle, allowing the package to be used as both a standalone app and a reusable library.
+The project is structured as a Swift Package with a single main target.
 
-## Usage
-1. **Onboarding**: Launch the app to see the setup screen. Tap `Pick Lead from Photos`, `Pick Lead from Files`, or drop an image anywhere on the screen.
-2. **Select Target**: Once a lead is set, browse the character grid below. Tap any image to assign it as the `Target`. Tap again to deselect.
-3. **Cast**: When both Lead and Target are selected, the bottom bar appears. Tap `Cast` to trigger the casting pipeline. The app provides haptic success feedback and increments the cast counter.
-4. **Manage Library**: 
-   - Use the search bar to filter characters by filename.
-   - Long-press any character to access the context menu (Use as Lead, Clear Selection, Delete).
-   - Tap `Reset` in the toolbar to clear Lead/Target assignments without deleting library items.
+### Key Files
 
-## Architecture & Key Files
+- `CharacterCast3App.swift`: The app entry point. Configures the global tint color (`#F23F8C`) and enforces dark mode.
+- `ContentView.swift`: The core UI logic. Handles state management for selections, imports, and the casting workflow.
+- `Package.swift`: Defines the project dependencies, including `ProjectService`.
 
-| File | Purpose |
-|------|---------|
-| `CharacterCast3/CharacterCast3App.swift` | App entry point. Configures `WindowGroup`, applies `.tint()` and `.preferredColorScheme(.dark)`, and initializes `ContentView`. |
-| `CharacterCast3/ContentView.swift` | Core UI and business logic. Manages import flows, state (`@State`), thumbnail rendering, search filtering, and casting triggers. Contains the `ThumbnailLoader` actor and `Thumbnail` view. |
-| `Package.swift` | Swift Package Manager manifest. Defines iOS 26 platform, Swift 6 language mode, and target configuration. |
-| `ProjectService` | (External/Required Module) Handles file persistence (`saveFile`, `getUrl`), casting logic (`setCharacterCast`), and likely image processing pipelines. |
+### Dependencies
 
-## Technical Details & Conventions
+- **ProjectService**: A custom service (fetched from `femimarket/swift-project-service`) that handles file persistence and URL resolution for the character images.
 
-### State & Async Management
-- UI state is centralized in `ContentView` using `@State` properties (`mainFilename`, `targetFilename`, `targets`, `castCount`, etc.).
-- Async operations (photo loading, directory scanning, thumbnail generation) are wrapped in `Task` and `.task` modifiers to maintain main-thread safety.
-- `refreshTargets()` runs on a `.utility` priority detached task, filters by supported extensions, and sorts by modification date.
+## Installation & Setup
 
-### Thumbnail System
-- `ThumbnailLoader` is a `private actor` that prevents concurrent cache corruption.
-- Uses `NSCache<NSString, UIImage>` with a `countLimit` of 600.
-- Leverages `CGImageSourceCreateThumbnailAtIndex` with `kCGImageSourceCreateThumbnailFromImageAlways` and `kCGImageSourceThumbnailMaxPixelSize` to avoid memory bloat from high-resolution assets.
+### Prerequisites
 
-### File Handling & Naming
-- Imported images are saved to the user's Documents directory via `ProjectService.saveFile`.
-- Auto-generated filenames follow the pattern: `<suggestedStem>-<UUID6>.jpg` (e.g., `drop-a1b2c3.jpg`).
-- The `displayName(_:)` helper strips UUID suffixes for cleaner UI labels using regex.
-- Security-scoped resources are properly accessed and released using `startAccessingSecurityScopedResource()` / `stopAccessingSecurityScopedResource()`.
+- **Xcode 16+** (Swift 6.2 toolchain)
+- **iOS 26+** (Note: The `Package.swift` specifies `.iOS(.v26)`. Ensure your development environment supports this target version).
 
-### UI Conventions
-- **Layout**: Adaptive `LazyVGrid` with `minimum: 100` spacing. Scroll bounce behavior enabled.
-- **Feedback**: `.sensoryFeedback(.selection)`, `.sensoryFeedback(.impact)`, and `.sensoryFeedback(.success)` are bound to state changes.
-- **Animations**: Spring animations (`response: 0.35, dampingFraction: 0.8`) are used consistently for slot transitions and selection states.
-- **Accessibility**: All interactive elements include `.accessibilityLabel()` and `.accessibilityAddTraits()` for screen reader compatibility.
-- **Theme**: Hardcoded dark mode and custom pink tint (`Color(red: 0.95, green: 0.25, blue: 0.55)`) are applied at the scene level.
+### Clone and Open
 
-## Dependencies
-- `SwiftUI`, `ImageIO`, `UniformTypeIdentifiers`, `PhotosUI` (standard iOS frameworks)
-- `ProjectService` (required module for persistence and casting logic)
+1. Clone the repository.
+2. Open the project in Xcode. Xcode will automatically resolve the Swift Package dependencies.
+3. Build and run on a simulator or device.
+
+## Usage Guide
+
+### 1. Onboarding
+
+When you first launch the app, you will see the onboarding screen. You can set up your first character by:
+- Tapping **"Pick Lead from Photos"** to select an image from your device's photo library.
+- Tapping **"Pick Lead from Files"** to browse your file system.
+- **Dragging and dropping** an image file anywhere onto the screen.
+
+### 2. Managing Characters
+
+Once you have at least one image, the app transitions to the **Working Layout**:
+
+- **Lead Slot**: Displays the currently selected lead character. Tap the menu to replace it or remove it.
+- **Target Slot**: Initially empty. Tap a character from the grid below to select them as the target.
+- **Character Grid**: Shows all imported images sorted by modification date (newest first).
+  - **Select Target**: Tap a character to set them as the target. A checkmark appears.
+  - **Set as Lead**: Long-press (context menu) on a character and select **"Use as Lead"**.
+  - **Delete**: Long-press (context menu) and select **"Delete"** to remove a character from the library.
+
+### 3. Casting
+
+When both a Lead and a Target are selected:
+1. A preview bar appears at the bottom of the screen showing the two characters.
+2. Tap the **"Cast"** button.
+3. The app triggers the `ProjectService.setCharacterCast` action.
+4. A success feedback animation plays, and the cast count increments.
+
+### 4. Resetting
+
+To clear your current selection without deleting characters:
+- Tap the **"Reset"** button in the top-right toolbar.
+- Confirm the action in the dialog. This clears the Lead and Target but keeps the images in your library.
+
+## Technical Details
+
+### Image Handling
+
+- **Supported Formats**: PNG, JPG, JPEG, HEIC, HEIF, WEBP, GIF, TIFF.
+- **Thumbnails**: The app uses a custom `Thumbnail` view with an `ThumbnailLoader` actor. It caches up to 600 images and downsamples them to a maximum pixel size to ensure smooth performance with large libraries.
+- **Storage**: Images are saved to the app's Document Directory using `ProjectService`.
+
+### State Management
+
+- `ContentView` uses `@State` properties to manage UI state (`mainFilename`, `targetFilename`, `targets`, etc.).
+- Asynchronous operations (like loading photos or refreshing the target list) are handled via `Task` and `@MainActor` to ensure thread safety.
+
+### Accessibility
+
+- The app includes accessibility labels for slots, characters, and actions.
+- Sensory feedback (haptic and sound) is triggered on selection and casting events.
+
+## Troubleshooting
+
+- **Images not appearing**: Ensure the images are in a supported format. Check the console for any import errors.
+- **Performance issues**: If you have a very large library, the app will load thumbnails lazily. Ensure you are running on a device that supports the specified iOS version.
+- **Reset not working**: If the reset dialog does not appear, check that you have at least one selection (Lead or Target) active.
